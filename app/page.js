@@ -11,6 +11,7 @@ const QUESTIONS = {
 
 const inputStyle = { width: "100%", background: "#0f0f18", border: "1px solid #2e2e42", borderRadius: 10, padding: "10px 14px", color: "#e8e8f0", fontSize: 14, outline: "none", boxSizing: "border-box" };
 const taStyle = { ...inputStyle, resize: "vertical", lineHeight: 1.7 };
+const tc = { "難関": { accent: "#f59e0b", bg: "#2a1f0a", border: "#4a3010", badge: "#f59e0b22" }, "上位": { accent: "#60a5fa", bg: "#0a1a2a", border: "#103050", badge: "#60a5fa22" }, "標準": { accent: "#4ade80", bg: "#0a2a1a", border: "#104030", badge: "#4ade8022" } };
 
 const callClaude = async (prompt) => {
   const res = await fetch("/api/claude", {
@@ -62,11 +63,127 @@ function ProfileSetup({ onComplete }) {
   );
 }
 
-// ─── Tab: 自己分析 ─────────────────────────────────────────────────
+// ─── 企業おすすめセクション（自己分析の下に統合）────────────────────
+function RecommendSection({ profile }) {
+  const [ranked, setRanked] = useState({});
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [openTiers, setOpenTiers] = useState({ 難関: true, 上位: false, 標準: false });
+
+  const toggle = (cat, val) => setRanked(prev => { const cur = prev[cat] || []; return cur.includes(val) ? { ...prev, [cat]: cur.filter(x => x !== val) } : { ...prev, [cat]: [...cur, val] }; });
+  const rankOf = (cat, val) => { const i = (ranked[cat] || []).indexOf(val); return i === -1 ? null : i + 1; };
+  const hasSelection = Object.values(ranked).some(v => v.length > 0);
+
+  const generate = async () => {
+    if (!hasSelection) return;
+    setLoading(true); setResult(null);
+    const selections = Object.entries(ranked).filter(([, v]) => v.length).map(([k, v]) => `${k}：${v.map((x, i) => `${i + 1}位「${x}」`).join("、")}`).join("\n");
+    const prompt = `あなたは日本の就職活動の専門家です。JSONのみで回答。余計な説明・コードブロック不要。
+
+${profile}
+
+【希望条件（優先順位付き）】
+${selections}
+
+{
+  "industries": [{"name":"","reason":"","fit_score":0}],
+  "tiers": [
+    {"level":"難関","label":"トップ難関（倍率100倍超）","companies":[{"name":"","industry":"","reason":"","salary":"","note":"","recruit_url":""}]},
+    {"level":"上位","label":"上位校向け（倍率30〜100倍）","companies":[]},
+    {"level":"標準","label":"標準（倍率10〜30倍・一般大手）","companies":[]}
+  ]
+}
+
+ルール：大手日系企業中心。各tier必ず10社。優先順位が高い条件ほど重視。上記プロフィールの強みや経験を活かせる企業を優先。`;
+    try {
+      const raw = await callClaude(prompt);
+      setResult(JSON.parse(raw));
+    } catch { alert("エラーが発生しました。"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      {/* セクション区切り */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ flex: 1, height: 1, background: "#2a2a3a" }} />
+        <span style={{ fontSize: 11, letterSpacing: 2, color: "#5b5bf0", textTransform: "uppercase" }}>企業おすすめ</span>
+        <div style={{ flex: 1, height: 1, background: "#2a2a3a" }} />
+      </div>
+
+      <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, marginBottom: 16, border: "1px solid #2a2a3a" }}>
+        <p style={{ margin: "0 0 4px", fontSize: 13, color: "#e8e8f0", fontWeight: 600 }}>上の分析結果をもとに、希望条件を選んでね</p>
+        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6b6b8a" }}>優先順にタップ。もう一度タップで解除。</p>
+        {Object.entries(QUESTIONS).map(([cat, opts]) => (
+          <div key={cat} style={{ marginBottom: 22 }}>
+            <div style={{ fontSize: 12, color: "#9090aa", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {cat}
+              {(ranked[cat] || []).length > 0 && <span style={{ fontSize: 10, color: "#5b5bf0", background: "#1a1a3a", padding: "2px 8px", borderRadius: 10 }}>{(ranked[cat] || []).join(" ＞ ")}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {opts.map(opt => { const rank = rankOf(cat, opt); const active = rank !== null; return (
+                <button key={opt} onClick={() => toggle(cat, opt)} style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: "1px solid", background: active ? "#5b5bf0" : "transparent", borderColor: active ? "#5b5bf0" : "#2e2e42", color: active ? "#fff" : "#9090aa", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 6 }}>
+                  {active && <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: "50%", width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{rank}</span>}
+                  {opt}
+                </button>
+              ); })}
+            </div>
+          </div>
+        ))}
+        <button onClick={generate} disabled={!hasSelection || loading} style={{ width: "100%", padding: 13, borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: hasSelection && !loading ? "pointer" : "not-allowed", background: hasSelection && !loading ? "linear-gradient(135deg, #5b5bf0, #8b5cf6)" : "#2a2a3a", color: hasSelection && !loading ? "#fff" : "#555", border: "none" }}>
+          {loading ? "分析中..." : "✦ 自己分析をもとに企業をおすすめしてもらう"}
+        </button>
+      </div>
+
+      {loading && <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, border: "1px solid #2a2a3a", color: "#6b6b8a", fontSize: 13 }}>● あなたの強みと照合して分析中...</div>}
+
+      {result && (
+        <div>
+          <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, border: "1px solid #2a2a3a", marginBottom: 16 }}>
+            <div style={{ fontSize: 10, letterSpacing: 2, color: "#8b5cf6", textTransform: "uppercase", marginBottom: 16 }}>おすすめ業界</div>
+            {result.industries?.map((ind, i) => (
+              <div key={i} style={{ marginBottom: i < result.industries.length - 1 ? 16 : 0, paddingBottom: i < result.industries.length - 1 ? 16 : 0, borderBottom: i < result.industries.length - 1 ? "1px solid #2a2a3a" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}><span style={{ fontWeight: 700, color: "#e8e8f0", fontSize: 15 }}>{ind.name}</span><span style={{ fontSize: 12, color: "#8b5cf6", background: "#2a1a4a", padding: "3px 10px", borderRadius: 20 }}>マッチ度 {ind.fit_score}%</span></div>
+                <p style={{ margin: 0, fontSize: 13, color: "#9090aa", lineHeight: 1.7 }}>{ind.reason}</p>
+              </div>
+            ))}
+          </div>
+          {result.tiers?.map(tier => { const c = tc[tier.level] || tc["標準"]; const open = openTiers[tier.level]; return (
+            <div key={tier.level} style={{ background: "#1a1a24", borderRadius: 16, border: `1px solid ${c.border}`, marginBottom: 16, overflow: "hidden" }}>
+              <button onClick={() => setOpenTiers(p => ({ ...p, [tier.level]: !p[tier.level] }))} style={{ width: "100%", background: c.bg, border: "none", padding: "14px 20px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontWeight: 800, fontSize: 15, color: c.accent }}>{tier.level}</span><span style={{ fontSize: 12, color: "#9090aa" }}>{tier.label}</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 11, color: c.accent, background: c.badge, padding: "3px 10px", borderRadius: 20 }}>{tier.companies?.length}社</span><span style={{ color: "#6b6b8a" }}>{open ? "▲" : "▼"}</span></div>
+              </button>
+              {open && <div style={{ padding: "4px 20px 20px" }}>
+                {tier.companies?.map((co, i) => (
+                  <div key={i} style={{ marginTop: 14, paddingTop: 14, borderTop: i === 0 ? "none" : "1px solid #2a2a3a" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                      <div><span style={{ fontWeight: 700, color: "#e8e8f0", fontSize: 14 }}>{co.name}</span><span style={{ marginLeft: 8, fontSize: 11, color: "#6b6b8a", background: "#1f1f2e", padding: "2px 8px", borderRadius: 10 }}>{co.industry}</span></div>
+                      {co.salary && <span style={{ fontSize: 11, color: "#22c55e", whiteSpace: "nowrap", marginLeft: 8 }}>{co.salary}</span>}
+                    </div>
+                    <p style={{ margin: "3px 0 0", fontSize: 12, color: "#9090aa", lineHeight: 1.7 }}>{co.reason}</p>
+                    {co.note && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a07040", background: "#2a1a0a", padding: "3px 10px", borderRadius: 8, display: "inline-block" }}>⚠ {co.note}</p>}
+                    <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {co.recruit_url && <a href={co.recruit_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#5b5bf0", background: "#1a1a3a", border: "1px solid #3a3a6a", borderRadius: 8, padding: "4px 12px", textDecoration: "none" }}>📄 募集要項を見る</a>}
+                      <a href={`https://www.google.com/search?q=${encodeURIComponent(co.name + " 新卒採用 2027")}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#9090aa", background: "#1a1a24", border: "1px solid #2e2e42", borderRadius: 8, padding: "4px 12px", textDecoration: "none" }}>🔍 採用情報を検索</a>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+            </div>
+          ); })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab: 自己分析 + 企業おすすめ ──────────────────────────────────
 function AnalysisTab({ userInput, onProfileReady }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [ran, setRan] = useState(false);
+  const [profile, setProfile] = useState(null);
 
   const analyze = async () => {
     setLoading(true);
@@ -86,17 +203,18 @@ ${userInput.want || "特になし"}
   "industry_logic": [
     { "industry": "業界名", "reason": "なぜこの業界が合うか（経験・希望との接点を具体的に、2〜3文）", "caution": "この業界を選ぶ上での注意点や現実（1文）" }
   ],
-  "positioning": "この学生が就活でどう自分を位置づけるべきか、戦略的なアドバイス（3〜4文。がくちがなくても使える経験の言語化方法も含む）",
-  "next_actions": ["具体的な次のアクション（短く）", "..."]
+  "positioning": "この学生が就活でどう自分を位置づけるべきか、戦略的なアドバイス（3〜4文）",
+  "next_actions": ["具体的な次のアクション（短く）"]
 }
 
 ルール：強みは3つ、業界は3〜4つ、next_actionsは3〜4個。経験が薄くても前向きに、でも現実的に。`;
     try {
-      const raw = await callClaude(prompt, 1500);
+      const raw = await callClaude(prompt);
       const parsed = JSON.parse(raw);
       setResult(parsed);
-      const profile = `【卒業予定】${userInput.grad}\n【経験】\n${userInput.exp}\n【やりたいこと】${userInput.want || "特になし"}\n【強み（AI分析）】${parsed.strengths?.map(s => s.title).join("、")}`;
-      onProfileReady(profile);
+      const p = `【卒業予定】${userInput.grad}\n【経験】\n${userInput.exp}\n【やりたいこと】${userInput.want || "特になし"}\n【強み（AI分析）】${parsed.strengths?.map(s => s.title).join("、")}`;
+      setProfile(p);
+      onProfileReady(p);
     } catch { setResult(null); }
     setLoading(false);
     setRan(true);
@@ -162,9 +280,8 @@ ${userInput.want || "特になし"}
         ))}
       </div>
 
-      <div style={{ background: "#1a1a3a", borderRadius: 12, padding: "12px 16px", border: "1px solid #3a3a6a", fontSize: 12, color: "#8080c0" }}>
-        💡 分析できたら「企業おすすめ」タブで条件を選んで具体的な企業を探してみよう
-      </div>
+      {/* 企業おすすめを自動表示 */}
+      {profile && <RecommendSection profile={profile} />}
     </div>
   );
 }
@@ -239,120 +356,12 @@ ${extra ? `【追加メモ】${extra}` : ""}
   );
 }
 
-// ─── Tab: 企業おすすめ ─────────────────────────────────────────────
-function RecommendTab({ profile }) {
-  const [ranked, setRanked] = useState({});
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [openTiers, setOpenTiers] = useState({ 難関: true, 上位: false, 標準: false });
-
-  const toggle = (cat, val) => setRanked(prev => { const cur = prev[cat] || []; return cur.includes(val) ? { ...prev, [cat]: cur.filter(x => x !== val) } : { ...prev, [cat]: [...cur, val] }; });
-  const rankOf = (cat, val) => { const i = (ranked[cat] || []).indexOf(val); return i === -1 ? null : i + 1; };
-  const hasSelection = Object.values(ranked).some(v => v.length > 0);
-
-  const generate = async () => {
-    if (!hasSelection) return;
-    setLoading(true); setResult(null);
-    const selections = Object.entries(ranked).filter(([, v]) => v.length).map(([k, v]) => `${k}：${v.map((x, i) => `${i + 1}位「${x}」`).join("、")}`).join("\n");
-    const prompt = `あなたは日本の就職活動の専門家です。JSONのみで回答。余計な説明・コードブロック不要。
-
-${profile || "（プロフィール未設定）"}
-
-【希望条件（優先順位付き）】
-${selections}
-
-{
-  "industries": [{"name":"","reason":"","fit_score":0}],
-  "tiers": [
-    {"level":"難関","label":"トップ難関（倍率100倍超）","companies":[{"name":"","industry":"","reason":"","salary":"","note":"","recruit_url":""}]},
-    {"level":"上位","label":"上位校向け（倍率30〜100倍）","companies":[]},
-    {"level":"標準","label":"標準（倍率10〜30倍・一般大手）","companies":[]}
-  ]
-}
-
-ルール：大手日系企業中心。各tier必ず10社。優先順位が高い条件ほど重視。`;
-    try {
-      const raw = await callClaude(prompt, 2500);
-      setResult(JSON.parse(raw));
-    } catch { alert("エラーが発生しました。"); }
-    setLoading(false);
-  };
-
-  const tc = { "難関": { accent: "#f59e0b", bg: "#2a1f0a", border: "#4a3010", badge: "#f59e0b22" }, "上位": { accent: "#60a5fa", bg: "#0a1a2a", border: "#103050", badge: "#60a5fa22" }, "標準": { accent: "#4ade80", bg: "#0a2a1a", border: "#104030", badge: "#4ade8022" } };
-
-  return (
-    <div>
-      <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, marginBottom: 20, border: "1px solid #2a2a3a" }}>
-        <p style={{ margin: "0 0 4px", fontSize: 13, color: "#e8e8f0", fontWeight: 600 }}>優先したい順にタップして選んでね</p>
-        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6b6b8a" }}>最初にタップしたものが1位になる。もう一度タップで解除。</p>
-        {Object.entries(QUESTIONS).map(([cat, opts]) => (
-          <div key={cat} style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 12, color: "#9090aa", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {cat}
-              {(ranked[cat] || []).length > 0 && <span style={{ fontSize: 10, color: "#5b5bf0", background: "#1a1a3a", padding: "2px 8px", borderRadius: 10 }}>{(ranked[cat] || []).join(" ＞ ")}</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {opts.map(opt => { const rank = rankOf(cat, opt); const active = rank !== null; return (
-                <button key={opt} onClick={() => toggle(cat, opt)} style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: "1px solid", background: active ? "#5b5bf0" : "transparent", borderColor: active ? "#5b5bf0" : "#2e2e42", color: active ? "#fff" : "#9090aa", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 6 }}>
-                  {active && <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: "50%", width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{rank}</span>}
-                  {opt}
-                </button>
-              ); })}
-            </div>
-          </div>
-        ))}
-        <button onClick={generate} disabled={!hasSelection || loading} style={{ width: "100%", padding: 13, borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: hasSelection && !loading ? "pointer" : "not-allowed", background: hasSelection && !loading ? "linear-gradient(135deg, #5b5bf0, #8b5cf6)" : "#2a2a3a", color: hasSelection && !loading ? "#fff" : "#555", border: "none" }}>
-          {loading ? "分析中..." : "✦ 業界・企業をおすすめしてもらう"}
-        </button>
-      </div>
-      {loading && <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, border: "1px solid #2a2a3a", color: "#6b6b8a", fontSize: 13 }}>● プロフィールと照合して分析中...</div>}
-      {result && (
-        <div>
-          <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, border: "1px solid #2a2a3a", marginBottom: 16 }}>
-            <div style={{ fontSize: 10, letterSpacing: 2, color: "#8b5cf6", textTransform: "uppercase", marginBottom: 16 }}>おすすめ業界</div>
-            {result.industries?.map((ind, i) => (
-              <div key={i} style={{ marginBottom: i < result.industries.length - 1 ? 16 : 0, paddingBottom: i < result.industries.length - 1 ? 16 : 0, borderBottom: i < result.industries.length - 1 ? "1px solid #2a2a3a" : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}><span style={{ fontWeight: 700, color: "#e8e8f0", fontSize: 15 }}>{ind.name}</span><span style={{ fontSize: 12, color: "#8b5cf6", background: "#2a1a4a", padding: "3px 10px", borderRadius: 20 }}>マッチ度 {ind.fit_score}%</span></div>
-                <p style={{ margin: 0, fontSize: 13, color: "#9090aa", lineHeight: 1.7 }}>{ind.reason}</p>
-              </div>
-            ))}
-          </div>
-          {result.tiers?.map(tier => { const c = tc[tier.level] || tc["標準"]; const open = openTiers[tier.level]; return (
-            <div key={tier.level} style={{ background: "#1a1a24", borderRadius: 16, border: `1px solid ${c.border}`, marginBottom: 16, overflow: "hidden" }}>
-              <button onClick={() => setOpenTiers(p => ({ ...p, [tier.level]: !p[tier.level] }))} style={{ width: "100%", background: c.bg, border: "none", padding: "14px 20px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontWeight: 800, fontSize: 15, color: c.accent }}>{tier.level}</span><span style={{ fontSize: 12, color: "#9090aa" }}>{tier.label}</span></div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 11, color: c.accent, background: c.badge, padding: "3px 10px", borderRadius: 20 }}>{tier.companies?.length}社</span><span style={{ color: "#6b6b8a" }}>{open ? "▲" : "▼"}</span></div>
-              </button>
-              {open && <div style={{ padding: "4px 20px 20px" }}>
-                {tier.companies?.map((co, i) => (
-                  <div key={i} style={{ marginTop: 14, paddingTop: 14, borderTop: i === 0 ? "none" : "1px solid #2a2a3a" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-                      <div><span style={{ fontWeight: 700, color: "#e8e8f0", fontSize: 14 }}>{co.name}</span><span style={{ marginLeft: 8, fontSize: 11, color: "#6b6b8a", background: "#1f1f2e", padding: "2px 8px", borderRadius: 10 }}>{co.industry}</span></div>
-                      {co.salary && <span style={{ fontSize: 11, color: "#22c55e", whiteSpace: "nowrap", marginLeft: 8 }}>{co.salary}</span>}
-                    </div>
-                    <p style={{ margin: "3px 0 0", fontSize: 12, color: "#9090aa", lineHeight: 1.7 }}>{co.reason}</p>
-                    {co.note && <p style={{ margin: "4px 0 0", fontSize: 11, color: "#a07040", background: "#2a1a0a", padding: "3px 10px", borderRadius: 8, display: "inline-block" }}>⚠ {co.note}</p>}
-                    <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {co.recruit_url && <a href={co.recruit_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#5b5bf0", background: "#1a1a3a", border: "1px solid #3a3a6a", borderRadius: 8, padding: "4px 12px", textDecoration: "none" }}>📄 募集要項を見る</a>}
-                      <a href={`https://www.google.com/search?q=${encodeURIComponent(co.name + " 新卒採用 2027")}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#9090aa", background: "#1a1a24", border: "1px solid #2e2e42", borderRadius: 8, padding: "4px 12px", textDecoration: "none" }}>🔍 採用情報を検索</a>
-                    </div>
-                  </div>
-                ))}
-              </div>}
-            </div>
-          ); })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Main ──────────────────────────────────────────────────────────
 export default function App() {
   const [userInput, setUserInput] = useState(null);
   const [profile, setProfile] = useState(null);
   const [tab, setTab] = useState(0);
-  const tabs = ["自己分析", "ES・面接回答", "企業おすすめ"];
+  const tabs = ["自己分析 & 企業おすすめ", "ES・面接回答"];
 
   if (!userInput) return <ProfileSetup onComplete={input => { setUserInput(input); setTab(0); }} />;
 
@@ -368,7 +377,6 @@ export default function App() {
         </div>
         {tab === 0 && <AnalysisTab userInput={userInput} onProfileReady={setProfile} />}
         {tab === 1 && <ESTab profile={profile} />}
-        {tab === 2 && <RecommendTab profile={profile} />}
       </div>
     </div>
   );
