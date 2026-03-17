@@ -184,7 +184,7 @@ const tierStyle = {
 function RecommendSection({ profile }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [openTiers, setOpenTiers] = useState({ 難関: true, 上位: false, 標準: false });
+  const [openTiers, setOpenTiers] = useState({ 難関: true, 上位: true, 標準: true });
 
   const generate = async () => {
     setLoading(true); setResult(null);
