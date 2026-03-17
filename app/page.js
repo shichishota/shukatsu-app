@@ -65,36 +65,28 @@ function ProfileSetup({ onComplete }) {
 
 // ─── 企業おすすめセクション（自己分析の下に統合）────────────────────
 function RecommendSection({ profile }) {
-  const [ranked, setRanked] = useState({});
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openTiers, setOpenTiers] = useState({ 難関: true, 上位: false, 標準: false });
 
-  const toggle = (cat, val) => setRanked(prev => { const cur = prev[cat] || []; return cur.includes(val) ? { ...prev, [cat]: cur.filter(x => x !== val) } : { ...prev, [cat]: [...cur, val] }; });
-  const rankOf = (cat, val) => { const i = (ranked[cat] || []).indexOf(val); return i === -1 ? null : i + 1; };
-  const hasSelection = Object.values(ranked).some(v => v.length > 0);
-
   const generate = async () => {
-    if (!hasSelection) return;
     setLoading(true); setResult(null);
-    const selections = Object.entries(ranked).filter(([, v]) => v.length).map(([k, v]) => `${k}：${v.map((x, i) => `${i + 1}位「${x}」`).join("、")}`).join("\n");
     const prompt = `あなたは日本の就職活動の専門家です。JSONのみで回答。余計な説明・コードブロック不要。
+
+以下の学生のプロフィール・強み・志向性を深く読み込んで、この学生に本当に合う企業をおすすめしてください。
 
 ${profile}
 
-【希望条件（優先順位付き）】
-${selections}
-
 {
-  "industries": [{"name":"","reason":"","fit_score":0}],
+  "industries": [{"name":"","reason":"この学生の経験・強みとの具体的な接点（2文）","fit_score":0}],
   "tiers": [
-    {"level":"難関","label":"トップ難関（倍率100倍超）","companies":[{"name":"","industry":"","reason":"","salary":"","note":"","recruit_url":""}]},
+    {"level":"難関","label":"トップ難関（倍率100倍超）","companies":[{"name":"","industry":"","reason":"この学生の強みや経験がどう活きるか具体的に（2文）","salary":"","note":"","recruit_url":""}]},
     {"level":"上位","label":"上位校向け（倍率30〜100倍）","companies":[]},
     {"level":"標準","label":"標準（倍率10〜30倍・一般大手）","companies":[]}
   ]
 }
 
-ルール：大手日系企業中心。各tier必ず10社。優先順位が高い条件ほど重視。上記プロフィールの強みや経験を活かせる企業を優先。`;
+ルール：大手日系企業中心。各tier必ず10社。プロフィールの強み・経験・やりたいことを最大限に考慮する。理由は必ずこの学生の具体的な経験に紐づけること。`;
     try {
       const raw = await callClaude(prompt);
       setResult(JSON.parse(raw));
@@ -104,36 +96,21 @@ ${selections}
 
   return (
     <div style={{ marginTop: 8 }}>
-      {/* セクション区切り */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <div style={{ flex: 1, height: 1, background: "#2a2a3a" }} />
         <span style={{ fontSize: 11, letterSpacing: 2, color: "#5b5bf0", textTransform: "uppercase" }}>企業おすすめ</span>
         <div style={{ flex: 1, height: 1, background: "#2a2a3a" }} />
       </div>
 
-      <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, marginBottom: 16, border: "1px solid #2a2a3a" }}>
-        <p style={{ margin: "0 0 4px", fontSize: 13, color: "#e8e8f0", fontWeight: 600 }}>上の分析結果をもとに、希望条件を選んでね</p>
-        <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6b6b8a" }}>優先順にタップ。もう一度タップで解除。</p>
-        {Object.entries(QUESTIONS).map(([cat, opts]) => (
-          <div key={cat} style={{ marginBottom: 22 }}>
-            <div style={{ fontSize: 12, color: "#9090aa", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {cat}
-              {(ranked[cat] || []).length > 0 && <span style={{ fontSize: 10, color: "#5b5bf0", background: "#1a1a3a", padding: "2px 8px", borderRadius: 10 }}>{(ranked[cat] || []).join(" ＞ ")}</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {opts.map(opt => { const rank = rankOf(cat, opt); const active = rank !== null; return (
-                <button key={opt} onClick={() => toggle(cat, opt)} style={{ padding: "7px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: "1px solid", background: active ? "#5b5bf0" : "transparent", borderColor: active ? "#5b5bf0" : "#2e2e42", color: active ? "#fff" : "#9090aa", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 6 }}>
-                  {active && <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: "50%", width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{rank}</span>}
-                  {opt}
-                </button>
-              ); })}
-            </div>
-          </div>
-        ))}
-        <button onClick={generate} disabled={!hasSelection || loading} style={{ width: "100%", padding: 13, borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: hasSelection && !loading ? "pointer" : "not-allowed", background: hasSelection && !loading ? "linear-gradient(135deg, #5b5bf0, #8b5cf6)" : "#2a2a3a", color: hasSelection && !loading ? "#fff" : "#555", border: "none" }}>
-          {loading ? "分析中..." : "✦ 自己分析をもとに企業をおすすめしてもらう"}
-        </button>
-      </div>
+      {!result && !loading && (
+        <div style={{ background: "#1a1a24", borderRadius: 16, padding: 28, marginBottom: 16, border: "1px solid #2a2a3a", textAlign: "center" }}>
+          <p style={{ margin: "0 0 6px", fontSize: 14, color: "#e8e8f0", fontWeight: 600 }}>上の自己分析をもとに企業をおすすめするよ</p>
+          <p style={{ margin: "0 0 20px", fontSize: 12, color: "#6b6b8a" }}>あなたの強みや経験に合った企業を難易度別に30社出します</p>
+          <button onClick={generate} style={{ padding: "12px 32px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", background: "linear-gradient(135deg, #5b5bf0, #8b5cf6)", color: "#fff", border: "none" }}>
+            ✦ おすすめ企業を出す
+          </button>
+        </div>
+      )}
 
       {loading && <div style={{ background: "#1a1a24", borderRadius: 16, padding: 24, border: "1px solid #2a2a3a", color: "#6b6b8a", fontSize: 13 }}>● あなたの強みと照合して分析中...</div>}
 
