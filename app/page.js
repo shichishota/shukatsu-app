@@ -203,11 +203,12 @@ ${profile}
   ]
 }
 
-ルール：大手日系企業中心。各tier必ず10社。プロフィールの強み・経験・やりたいことを最大限に考慮する。理由は必ずこの学生の具体的な経験に紐づけること。`;
+ルール：大手日系企業中心。各tier必ず5社。プロフィールの強み・経験・やりたいことを最大限に考慮する。理由は必ずこの学生の具体的な経験に紐づけること。`;
     try {
       const raw = await callClaude(prompt);
-      setResult(JSON.parse(raw));
-    } catch { alert("エラーが発生しました。"); }
+      const match = raw.match(/\{[\s\S]*\}/);
+      setResult(JSON.parse(match ? match[0] : raw));
+    } catch { alert("エラーが発生しました。もう一度試してください。"); }
     setLoading(false);
   };
 
